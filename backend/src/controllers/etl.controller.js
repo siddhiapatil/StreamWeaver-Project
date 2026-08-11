@@ -7,13 +7,15 @@
  * and sends the response back to the client.
  */
 
-
-console.log("ETL CONTROLLER LOADED");
+const { prepareSource } = require("../services/etl.service");
 
 const processETL = (req, res) => {
+    const source = prepareSource(req.body);
+
     res.json({
         success: true,
-        message: "ETL module working"
+        message: "ETL module working",
+        source: source
     });
 };
 
