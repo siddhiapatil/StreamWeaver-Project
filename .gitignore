@@ -7,6 +7,7 @@ node_modules/
 
 # Uploaded test files
 backend/uploads/*.csv
+!backend/uploads/etl-test.csv
 
 # Logs
 *.log
