@@ -6,11 +6,11 @@
  *
  * Responsibilities:
  * - Identify the input source
- * - Support CSV and JSON source types
- * - Prepare source information for extraction
- *
- * Actual file reading will be implemented in the next task.
+ * - Read CSV source data
+ * - Prepare source information for the ETL pipeline
  */
+
+const { readCSV } = require("../utils/csvParser");
 
 /**
  * Creates a source configuration for the ETL pipeline.
@@ -25,6 +25,25 @@ const createSource = (sourceConfig) => {
     };
 };
 
+/**
+ * Reads data from the configured CSV source.
+ *
+ * @param {Object} sourceConfig - Source configuration
+ * @returns {Promise<string>} CSV data
+ */
+const extractCSV = async (sourceConfig) => {
+    if (sourceConfig.type !== "csv") {
+        throw new Error("Only CSV source is supported currently");
+    }
+
+    if (!sourceConfig.path) {
+        throw new Error("CSV source path is required");
+    }
+
+    return await readCSV(sourceConfig.path);
+};
+
 module.exports = {
-    createSource
+    createSource,
+    extractCSV
 };
