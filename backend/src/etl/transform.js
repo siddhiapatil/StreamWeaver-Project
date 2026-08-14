@@ -57,9 +57,15 @@ class CSVToJSONTransform extends Transform {
                 const row = {};
 
                 this.headers.forEach((header, index) => {
-                    row[header] = values[index] || "";
-                });
+    let value = values[index] || "";
 
+    // Basic transformation: convert firstName to uppercase
+    if (header === "firstName") {
+        value = value.toUpperCase();
+    }
+
+    row[header] = value;
+});
                 this.push(row);
             }
 
