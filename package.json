@@ -1,5 +1,11 @@
 {
   "name": "streamweaver",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["backend", "frontend"],
+  "scripts": {
+    "dev": "npm run dev --workspace=backend",
+    "test": "npm run test --workspace=backend"
   "version": "1.0.0",
   "description": "",
   "main": "index.js",

@@ -1,16 +1,8 @@
-# Dependencies
 node_modules/
-
-# Environment variables
 .env
 .env.*
+!.env.example
+uploads/
+coverage/
+dist/
 
-# Uploaded test files
-backend/uploads/*.csv
-
-# Logs
-*.log
-
-# OS files
-.DS_Store
-Thumbs.db
