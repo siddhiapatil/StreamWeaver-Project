@@ -8,16 +8,13 @@
  * - Receive CSV data in chunks
  * - Process CSV rows using a Transform stream
  * - Convert CSV rows into JSON objects
- * - Process data piece-by-piece to reduce memory usage
+ * - Apply basic data transformation
  */
 
 const { Transform } = require("stream");
 
 /**
  * Transform CSV rows into JSON objects.
- *
- * The stream receives CSV chunks and converts each
- * complete CSV row into a JavaScript object.
  */
 class CSVToJSONTransform extends Transform {
     constructor(options = {}) {
@@ -28,6 +25,28 @@ class CSVToJSONTransform extends Transform {
 
         this.headers = null;
         this.buffer = "";
+    }
+
+    /**
+     * Convert CSV values into a JSON row.
+     *
+     * Basic transformation:
+     * firstName is converted to uppercase.
+     */
+    createRow(values) {
+        const row = {};
+
+        this.headers.forEach((header, index) => {
+            let value = values[index] || "";
+
+            if (header === "firstName") {
+                value = value.toUpperCase();
+            }
+
+            row[header] = value;
+        });
+
+        return row;
     }
 
     _transform(chunk, encoding, callback) {
@@ -53,20 +72,7 @@ class CSVToJSONTransform extends Transform {
                 }
 
                 const values = trimmedLine.split(",");
-
-                const row = {};
-
-                this.headers.forEach((header, index) => {
-    let value = values[index] || "";
-
-    // Basic transformation: convert firstName to uppercase
-    if (header === "firstName") {
-        value = value.toUpperCase();
-    }
-
-    row[header] = value;
-});
-                this.push(row);
+                this.push(this.createRow(values));
             }
 
             callback();
@@ -79,14 +85,7 @@ class CSVToJSONTransform extends Transform {
         try {
             if (this.buffer.trim() && this.headers) {
                 const values = this.buffer.trim().split(",");
-
-                const row = {};
-
-                this.headers.forEach((header, index) => {
-                    row[header] = values[index] || "";
-                });
-
-                this.push(row);
+                this.push(this.createRow(values));
             }
 
             callback();
