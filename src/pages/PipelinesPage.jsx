@@ -1,345 +1,922 @@
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 import "../styles/Pipelines.css";
-
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-
-import Navbar from "../components/Navbar";
-import Sidebar from "../components/Sidebar";
-
-import {
-  FaDatabase,
-  FaArrowRight,
-  FaPlay,
-  FaTrash,
-} from "react-icons/fa";
+const API_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
 function PipelinesPage() {
-  const navigate = useNavigate();
+  // -----------------------------
+  // Pipeline details
+  // -----------------------------
 
-  const [dataset, setDataset] = useState(null);
   const [pipelineName, setPipelineName] = useState("");
-  const [source, setSource] = useState("Uploaded Dataset");
-  const [transform, setTransform] = useState("None");
-  const [destination, setDestination] = useState("MongoDB");
-  const [created, setCreated] = useState(false);
+  const [description, setDescription] = useState("");
+
+  // -----------------------------
+  // Source
+  // -----------------------------
+
+  const [source, setSource] = useState({
+    dataset: "",
+    fileType: "",
+  });
+
+  // -----------------------------
+  // Transformation
+  // -----------------------------
+
+  const [transformation, setTransformation] = useState({
+    type: "",
+    column: "",
+  });
+
+  // -----------------------------
+  // Destination
+  // -----------------------------
+
+  const [destination, setDestination] = useState({
+    type: "",
+    collection: "",
+  });
+
+  // -----------------------------
+  // Uploaded datasets
+  // -----------------------------
+
+  const [datasets, setDatasets] = useState([]);
+
+  // -----------------------------
+  // Existing pipelines
+  // -----------------------------
+
+  const [pipelines, setPipelines] = useState([]);
+
+  // -----------------------------
+  // UI states
+  // -----------------------------
+
+  const [loading, setLoading] = useState(false);
+  const [fetchingPipelines, setFetchingPipelines] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  // =========================================================
+  // Load uploaded datasets from localStorage
+  // =========================================================
 
   useEffect(() => {
-    const savedDataset = localStorage.getItem(
-      "streamweaverSelectedDataset"
-    );
-
-    if (savedDataset) {
-      setDataset(JSON.parse(savedDataset));
-    }
+    loadDatasets();
+    fetchPipelines();
   }, []);
 
-  const handleCreatePipeline = () => {
-    if (!dataset) {
-      alert("Please upload a dataset first.");
-      navigate("/upload");
-      return;
+  const loadDatasets = () => {
+    try {
+      const savedDatasets =
+        JSON.parse(localStorage.getItem("streamweaverDatasets")) || [];
+
+      setDatasets(savedDatasets);
+    } catch (error) {
+      console.error("Error loading datasets:", error);
+      setDatasets([]);
     }
+  };
+
+  // =========================================================
+  // Get existing pipelines from backend
+  // =========================================================
+
+  const fetchPipelines = async () => {
+    try {
+      setFetchingPipelines(true);
+
+      const response = await axios.get(`${API_URL}/pipelines`);
+
+      if (response.data.success) {
+        setPipelines(response.data.pipelines || []);
+      }
+    } catch (error) {
+      console.error("Unable to fetch pipelines:", error);
+    } finally {
+      setFetchingPipelines(false);
+    }
+  };
+
+  // =========================================================
+  // Handle dataset selection
+  // =========================================================
+
+  const handleDatasetChange = (e) => {
+    const selectedDataset = e.target.value;
+
+    let fileType = "";
+
+    if (selectedDataset.toLowerCase().endsWith(".csv")) {
+      fileType = "csv";
+    } else if (selectedDataset.toLowerCase().endsWith(".json")) {
+      fileType = "json";
+    }
+
+    setSource({
+      dataset: selectedDataset,
+      fileType: fileType,
+    });
+  };
+
+  // =========================================================
+  // Handle transformation
+  // =========================================================
+
+  const handleTransformationChange = (e) => {
+    setTransformation({
+      ...transformation,
+      type: e.target.value,
+    });
+  };
+
+  // =========================================================
+  // Validation
+  // =========================================================
+
+  const validatePipeline = () => {
+    setError("");
+    setMessage("");
 
     if (!pipelineName.trim()) {
-      alert("Please enter a pipeline name.");
+      setError("Please enter a pipeline name.");
+      return false;
+    }
+
+    if (!source.dataset) {
+      setError("Please select a source dataset.");
+      return false;
+    }
+
+    if (!source.fileType) {
+      setError("Please select a valid CSV or JSON dataset.");
+      return false;
+    }
+
+    if (!transformation.type) {
+      setError("Please select a transformation.");
+      return false;
+    }
+
+    if (
+      transformation.type !== "remove-null" &&
+      !transformation.column.trim()
+    ) {
+      setError("Please enter the column name for the transformation.");
+      return false;
+    }
+
+    if (!destination.type) {
+      setError("Please select a destination.");
+      return false;
+    }
+
+    if (!destination.collection.trim()) {
+      setError("Please enter a destination collection name.");
+      return false;
+    }
+
+    return true;
+  };
+
+  // =========================================================
+  // Create pipeline
+  // =========================================================
+
+  const createPipeline = async () => {
+    if (!validatePipeline()) {
       return;
     }
 
-    const pipeline = {
-      id: Date.now(),
-      name: pipelineName,
-      dataset: dataset.name,
-      source,
-      transform,
-      destination,
-      status: "Ready",
-      createdAt: new Date().toLocaleString(),
+    const pipelineData = {
+      name: pipelineName.trim(),
+      description: description.trim(),
+
+      source: {
+        dataset: source.dataset,
+        fileType: source.fileType,
+      },
+
+      transformation: {
+        type: transformation.type,
+        column: transformation.column.trim(),
+      },
+
+      destination: {
+        type: destination.type,
+        collection: destination.collection.trim(),
+      },
     };
 
-    const existingPipelines = JSON.parse(
-      localStorage.getItem("streamweaverPipelines") || "[]"
-    );
+    try {
+      setLoading(true);
+      setError("");
+      setMessage("");
 
-    existingPipelines.push(pipeline);
+      const response = await axios.post(
+        `${API_URL}/pipelines`,
+        pipelineData
+      );
 
-    localStorage.setItem(
-      "streamweaverPipelines",
-      JSON.stringify(existingPipelines)
-    );
+      if (response.data.success) {
+        setMessage("Pipeline created successfully!");
 
-    setCreated(true);
+        // Refresh pipeline list
+        fetchPipelines();
+
+        // Clear form
+        setPipelineName("");
+        setDescription("");
+
+        setSource({
+          dataset: "",
+          fileType: "",
+        });
+
+        setTransformation({
+          type: "",
+          column: "",
+        });
+
+        setDestination({
+          type: "",
+          collection: "",
+        });
+      }
+    } catch (error) {
+      console.error("Pipeline creation error:", error);
+
+      if (error.response) {
+        setError(
+          error.response.data.message ||
+            "Failed to create pipeline."
+        );
+      } else {
+        setError(
+          "Unable to connect to backend. Make sure the server is running."
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const clearDataset = () => {
-    localStorage.removeItem(
-      "streamweaverSelectedDataset"
+  // =========================================================
+  // Delete pipeline
+  // =========================================================
+
+  const deletePipeline = async (id) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this pipeline?"
     );
 
-    setDataset(null);
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      await axios.delete(`${API_URL}/pipelines/${id}`);
+
+      setMessage("Pipeline deleted successfully.");
+
+      fetchPipelines();
+    } catch (error) {
+      console.error("Delete pipeline error:", error);
+
+      setError("Failed to delete pipeline.");
+    }
   };
+
+  // =========================================================
+  // Reset form
+  // =========================================================
+
+  const resetForm = () => {
+    setPipelineName("");
+    setDescription("");
+
+    setSource({
+      dataset: "",
+      fileType: "",
+    });
+
+    setTransformation({
+      type: "",
+      column: "",
+    });
+
+    setDestination({
+      type: "",
+      collection: "",
+    });
+
+    setError("");
+    setMessage("");
+  };
+
+  // =========================================================
+  // UI
+  // =========================================================
 
   return (
-    <div className="app-layout">
+    <div className="pipelines-page">
 
-      <Sidebar />
+      {/* ==============================================
+          PAGE HEADER
+      ============================================== */}
 
-      <div className="main-content">
+      <div className="pipeline-page-header">
+        <div>
+          <h1>Pipeline Builder</h1>
 
-        <Navbar />
+          <p>
+            Create and configure your StreamWeaver ETL pipeline
+          </p>
+        </div>
+      </div>
 
-        <div className="pipeline-page">
+      {/* ==============================================
+          SUCCESS MESSAGE
+      ============================================== */}
 
-          {/* HEADER */}
-          <div className="pipeline-header">
+      {message && (
+        <div className="success-message">
+          ✓ {message}
+        </div>
+      )}
 
-            <div>
-              <h1>Pipelines</h1>
+      {/* ==============================================
+          ERROR MESSAGE
+      ============================================== */}
 
-              <p>
-                Create and manage your ETL pipelines.
-              </p>
-            </div>
+      {error && (
+        <div className="error-message">
+          ⚠ {error}
+        </div>
+      )}
 
-            <button
-              className="back-btn"
-              onClick={() => navigate("/dashboard")}
-            >
-              Back to Dashboard
-            </button>
+      {/* ==============================================
+          PIPELINE DETAILS
+      ============================================== */}
 
+      <div className="pipeline-card">
+
+        <div className="section-title">
+          <span className="section-number">1</span>
+
+          <div>
+            <h2>Pipeline Details</h2>
+            <p>Give your pipeline a name and description.</p>
+          </div>
+        </div>
+
+        <div className="form-grid">
+
+          <div className="form-field">
+            <label>
+              Pipeline Name <span>*</span>
+            </label>
+
+            <input
+              type="text"
+              value={pipelineName}
+              onChange={(e) =>
+                setPipelineName(e.target.value)
+              }
+              placeholder="Example: Customer Data Pipeline"
+            />
           </div>
 
-          {/* DATASET */}
-          <div className="pipeline-card">
+          <div className="form-field">
+            <label>Description</label>
 
-            <h2>
-              <FaDatabase />
-              Dataset
-            </h2>
-
-            {dataset ? (
-              <div className="dataset-info">
-
-                <div>
-                  <strong>
-                    {dataset.name}
-                  </strong>
-
-                  <p>
-                    Type: {dataset.type}
-                  </p>
-
-                  <p>
-                    Status: {dataset.status}
-                  </p>
-                </div>
-
-                <button
-                  className="remove-dataset-btn"
-                  onClick={clearDataset}
-                >
-                  <FaTrash />
-                </button>
-
-              </div>
-            ) : (
-              <div className="no-dataset">
-
-                <p>
-                  No dataset selected.
-                </p>
-
-                <button
-                  onClick={() => navigate("/upload")}
-                >
-                  Upload Dataset
-                </button>
-
-              </div>
-            )}
-
+            <input
+              type="text"
+              value={description}
+              onChange={(e) =>
+                setDescription(e.target.value)
+              }
+              placeholder="Describe what this pipeline does"
+            />
           </div>
 
-          {/* PIPELINE CONFIGURATION */}
-          {dataset && !created && (
-            <div className="pipeline-card">
+        </div>
+      </div>
 
-              <h2>
-                Create New Pipeline
-              </h2>
+      {/* ==============================================
+          PIPELINE FLOW
+      ============================================== */}
 
-              {/* PIPELINE NAME */}
-              <div className="form-group">
+      <div className="pipeline-flow">
 
-                <label>
-                  Pipeline Name
-                </label>
+        {/* SOURCE */}
 
-                <input
-                  type="text"
-                  placeholder="Enter pipeline name"
-                  value={pipelineName}
-                  onChange={(e) =>
-                    setPipelineName(e.target.value)
-                  }
-                />
+        <div className="flow-node source-node">
 
-              </div>
+          <div className="flow-icon">
+            📁
+          </div>
 
-              {/* SOURCE */}
-              <div className="form-group">
+          <div>
+            <span>STEP 2</span>
+            <h3>Source</h3>
+            <p>
+              Select the dataset that will enter
+              the pipeline.
+            </p>
+          </div>
 
-                <label>
-                  Source
-                </label>
+        </div>
 
-                <select
-                  value={source}
-                  onChange={(e) =>
-                    setSource(e.target.value)
-                  }
-                >
-                  <option>
-                    Uploaded Dataset
-                  </option>
+        <div className="flow-arrow">
+          →
+        </div>
 
-                  <option>
-                    CSV File
-                  </option>
+        {/* TRANSFORMATION */}
 
-                  <option>
-                    JSON File
-                  </option>
-                </select>
+        <div className="flow-node transform-node">
 
-              </div>
+          <div className="flow-icon">
+            ⚙️
+          </div>
 
-              {/* TRANSFORMATION */}
-              <div className="form-group">
+          <div>
+            <span>STEP 3</span>
+            <h3>Transformation</h3>
+            <p>
+              Select how the data should be
+              transformed.
+            </p>
+          </div>
 
-                <label>
-                  Transformation
-                </label>
+        </div>
 
-                <select
-                  value={transform}
-                  onChange={(e) =>
-                    setTransform(e.target.value)
-                  }
-                >
+        <div className="flow-arrow">
+          →
+        </div>
 
-                  <option value="None">
-                    None
-                  </option>
+        {/* DESTINATION */}
 
-                  <option value="Capitalize">
-                    Capitalize Text
-                  </option>
+        <div className="flow-node destination-node">
 
-                  <option value="Remove Empty Rows">
-                    Remove Empty Rows
-                  </option>
+          <div className="flow-icon">
+            🗄️
+          </div>
 
-                  <option value="Remove Duplicates">
-                    Remove Duplicates
-                  </option>
-
-                </select>
-
-              </div>
-
-              {/* DESTINATION */}
-              <div className="form-group">
-
-                <label>
-                  Destination
-                </label>
-
-                <select
-                  value={destination}
-                  onChange={(e) =>
-                    setDestination(e.target.value)
-                  }
-                >
-
-                  <option value="MongoDB">
-                    MongoDB
-                  </option>
-
-                  <option value="MySQL">
-                    MySQL
-                  </option>
-
-                  <option value="CSV">
-                    CSV
-                  </option>
-
-                </select>
-
-              </div>
-
-              {/* CREATE */}
-              <button
-                className="create-pipeline-btn"
-                onClick={handleCreatePipeline}
-              >
-                Create Pipeline
-                <FaArrowRight />
-              </button>
-
-            </div>
-          )}
-
-          {/* SUCCESS */}
-          {created && (
-            <div className="pipeline-success">
-
-              <h2>
-                Pipeline Created Successfully!
-              </h2>
-
-              <p>
-                Your pipeline is ready to run.
-              </p>
-
-              <div className="pipeline-flow">
-
-                <span>
-                  {dataset.name}
-                </span>
-
-                <FaArrowRight />
-
-                <span>
-                  {transform}
-                </span>
-
-                <FaArrowRight />
-
-                <span>
-                  {destination}
-                </span>
-
-              </div>
-
-              <button
-                className="run-pipeline-btn"
-                onClick={() =>
-                  alert(
-                    "Pipeline execution will be connected to the backend later."
-                  )
-                }
-              >
-                <FaPlay />
-                Run Pipeline
-              </button>
-
-            </div>
-          )}
+          <div>
+            <span>STEP 4</span>
+            <h3>Destination</h3>
+            <p>
+              Select where the processed data
+              will be stored.
+            </p>
+          </div>
 
         </div>
 
       </div>
+
+      {/* ==============================================
+          SOURCE CONFIGURATION
+      ============================================== */}
+
+      <div className="pipeline-card">
+
+        <div className="section-title">
+
+          <span className="section-number">
+            2
+          </span>
+
+          <div>
+            <h2>Source Configuration</h2>
+
+            <p>
+              Select an uploaded CSV or JSON dataset.
+            </p>
+          </div>
+
+        </div>
+
+        <div className="form-grid">
+
+          <div className="form-field">
+
+            <label>
+              Dataset <span>*</span>
+            </label>
+
+            <select
+              value={source.dataset}
+              onChange={handleDatasetChange}
+            >
+
+              <option value="">
+                Select uploaded dataset
+              </option>
+
+              {datasets.map((dataset, index) => {
+
+                const datasetName =
+                  typeof dataset === "string"
+                    ? dataset
+                    : dataset.name ||
+                      dataset.fileName ||
+                      `Dataset ${index + 1}`;
+
+                return (
+                  <option
+                    key={index}
+                    value={datasetName}
+                  >
+                    {datasetName}
+                  </option>
+                );
+              })}
+
+            </select>
+
+            {datasets.length === 0 && (
+              <small className="helper-text">
+                No uploaded datasets found.
+                Upload a CSV or JSON file first.
+              </small>
+            )}
+
+          </div>
+
+          <div className="form-field">
+
+            <label>File Type</label>
+
+            <input
+              type="text"
+              value={
+                source.fileType
+                  ? source.fileType.toUpperCase()
+                  : ""
+              }
+              placeholder="Automatically detected"
+              readOnly
+            />
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* ==============================================
+          TRANSFORMATION CONFIGURATION
+      ============================================== */}
+
+      <div className="pipeline-card">
+
+        <div className="section-title">
+
+          <span className="section-number">
+            3
+          </span>
+
+          <div>
+            <h2>Transformation Configuration</h2>
+
+            <p>
+              Choose the operation to apply to your data.
+            </p>
+          </div>
+
+        </div>
+
+        <div className="form-grid">
+
+          <div className="form-field">
+
+            <label>
+              Transformation Type <span>*</span>
+            </label>
+
+            <select
+              value={transformation.type}
+              onChange={handleTransformationChange}
+            >
+
+              <option value="">
+                Select transformation
+              </option>
+
+              <option value="uppercase">
+                Convert to Uppercase
+              </option>
+
+              <option value="lowercase">
+                Convert to Lowercase
+              </option>
+
+              <option value="trim">
+                Trim Spaces
+              </option>
+
+              <option value="remove-null">
+                Remove Null Values
+              </option>
+
+            </select>
+
+          </div>
+
+          <div className="form-field">
+
+            <label>
+              Column Name
+              {transformation.type !== "remove-null" && (
+                <span> *</span>
+              )}
+            </label>
+
+            <input
+              type="text"
+              value={transformation.column}
+              onChange={(e) =>
+                setTransformation({
+                  ...transformation,
+                  column: e.target.value,
+                })
+              }
+              placeholder="Example: customer_name"
+              disabled={
+                transformation.type === "remove-null"
+              }
+            />
+
+            <small className="helper-text">
+              Enter the column on which the transformation
+              should be applied.
+            </small>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* ==============================================
+          DESTINATION CONFIGURATION
+      ============================================== */}
+
+      <div className="pipeline-card">
+
+        <div className="section-title">
+
+          <span className="section-number">
+            4
+          </span>
+
+          <div>
+            <h2>Destination Configuration</h2>
+
+            <p>
+              Configure where your processed data will go.
+            </p>
+          </div>
+
+        </div>
+
+        <div className="form-grid">
+
+          <div className="form-field">
+
+            <label>
+              Destination Type <span>*</span>
+            </label>
+
+            <select
+              value={destination.type}
+              onChange={(e) =>
+                setDestination({
+                  ...destination,
+                  type: e.target.value,
+                })
+              }
+            >
+
+              <option value="">
+                Select destination
+              </option>
+
+              <option value="mongodb">
+                MongoDB
+              </option>
+
+            </select>
+
+          </div>
+
+          <div className="form-field">
+
+            <label>
+              Collection Name <span>*</span>
+            </label>
+
+            <input
+              type="text"
+              value={destination.collection}
+              onChange={(e) =>
+                setDestination({
+                  ...destination,
+                  collection: e.target.value,
+                })
+              }
+              placeholder="Example: processed_customers"
+            />
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* ==============================================
+          PIPELINE PREVIEW
+      ============================================== */}
+
+      <div className="pipeline-card preview-card">
+
+        <div className="section-title">
+
+          <span className="section-number">
+            5
+          </span>
+
+          <div>
+            <h2>Pipeline Preview</h2>
+
+            <p>
+              Review your pipeline before creating it.
+            </p>
+          </div>
+
+        </div>
+
+        <div className="preview-flow">
+
+          <div className="preview-box">
+            <strong>📁 Source</strong>
+
+            <span>
+              {source.dataset || "Not selected"}
+            </span>
+          </div>
+
+          <div className="preview-arrow">
+            →
+          </div>
+
+          <div className="preview-box">
+            <strong>⚙️ Transform</strong>
+
+            <span>
+              {transformation.type
+                ? transformation.type
+                : "Not selected"}
+            </span>
+          </div>
+
+          <div className="preview-arrow">
+            →
+          </div>
+
+          <div className="preview-box">
+            <strong>🗄️ Destination</strong>
+
+            <span>
+              {destination.collection ||
+                "Not selected"}
+            </span>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* ==============================================
+          ACTION BUTTONS
+      ============================================== */}
+
+      <div className="pipeline-actions">
+
+        <button
+          className="reset-btn"
+          onClick={resetForm}
+          disabled={loading}
+        >
+          Reset
+        </button>
+
+        <button
+          className="create-pipeline-btn"
+          onClick={createPipeline}
+          disabled={loading}
+        >
+          {loading
+            ? "Creating Pipeline..."
+            : "Create Pipeline"}
+        </button>
+
+      </div>
+
+      {/* ==============================================
+          EXISTING PIPELINES
+      ============================================== */}
+
+      <div className="pipeline-card existing-pipelines">
+
+        <div className="section-title">
+
+          <div>
+            <h2>Existing Pipelines</h2>
+
+            <p>
+              Pipelines that have already been created.
+            </p>
+          </div>
+
+        </div>
+
+        {fetchingPipelines ? (
+          <div className="empty-state">
+            Loading pipelines...
+          </div>
+        ) : pipelines.length === 0 ? (
+          <div className="empty-state">
+            No pipelines created yet.
+          </div>
+        ) : (
+          <div className="pipeline-list">
+
+            {pipelines.map((pipeline) => (
+
+              <div
+                className="pipeline-list-item"
+                key={pipeline._id}
+              >
+
+                <div>
+
+                  <h3>
+                    {pipeline.name}
+                  </h3>
+
+                  <p>
+                    {pipeline.description ||
+                      "No description"}
+                  </p>
+
+                  <div className="pipeline-meta">
+
+                    <span>
+                      Source:{" "}
+                      {pipeline.source?.dataset ||
+                        "N/A"}
+                    </span>
+
+                    <span>
+                      Transform:{" "}
+                      {pipeline.transformation?.type ||
+                        "N/A"}
+                    </span>
+
+                    <span>
+                      Destination:{" "}
+                      {pipeline.destination?.type ||
+                        "N/A"}
+                    </span>
+
+                  </div>
+
+                </div>
+
+                <button
+                  className="delete-btn"
+                  onClick={() =>
+                    deletePipeline(pipeline._id)
+                  }
+                >
+                  Delete
+                </button>
+
+              </div>
+
+            ))}
+
+          </div>
+        )}
+
+      </div>
+
     </div>
   );
 }
