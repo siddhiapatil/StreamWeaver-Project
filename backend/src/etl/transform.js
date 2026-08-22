@@ -1,22 +1,17 @@
 /**
  * ---------------------------------------------------------
- * Transform Module
+ * Transform Module (Hardened against edge cases)
  * ---------------------------------------------------------
- * Supports multiple transformation modes:
- * 1. Schema Mapping & Text Normalization (e.g., uppercase)
- * 2. Row Filtering (e.g., filter by field condition)
+ * Handles:
+ * - Windows (\r\n) and Unix (\n) line breaks
+ * - Empty rows and trailing newlines
+ * - Missing / uneven columns
+ * - Case-insensitive header matching for transformations
  */
 
 const { Transform } = require("stream");
 
-/**
- * Transforms CSV stream rows into JSON objects with customizable transformations.
- */
 class CSVToJSONTransform extends Transform {
-    /**
-     * @param {Object} options - Transform options
-     * @param {Object} options.transformRules - Rules like { uppercaseFields: ["firstName"], filter: { field: "age", min: 21 } }
-     */
     constructor(options = {}) {
         super({
             ...options,
@@ -29,52 +24,62 @@ class CSVToJSONTransform extends Transform {
     }
 
     /**
-     * Maps raw CSV array values to a key-value object and applies text transforms.
+     * Cleans raw text chunks, removing carriage returns (\r).
+     */
+    cleanLine(line) {
+        return line.replace(/\r/g, "").trim();
+    }
+
+    /**
+     * Maps raw values to headers while handling uneven column counts.
      */
     createRow(values) {
         const row = {};
-        const uppercaseFields = this.transformRules.uppercaseFields || ["firstName"];
+        const uppercaseRules = (this.transformRules.uppercaseFields || []).map(f => f.toLowerCase());
 
         this.headers.forEach((header, index) => {
-            let value = values[index] !== undefined ? values[index].trim() : "";
+            let val = values[index] !== undefined ? values[index].replace(/\r/g, "").trim() : "";
 
-            // Transformation Type 1: Text Capitalization
-            if (uppercaseFields.includes(header)) {
-                value = value.toUpperCase();
+            // Apply uppercase transform if rule matches (case-insensitive)
+            if (uppercaseRules.includes(header.toLowerCase())) {
+                val = val.toUpperCase();
             }
 
-            row[header] = value;
+            row[header] = val;
         });
 
         return row;
     }
 
     /**
-     * Transformation Type 2: Row Filtering
-     * Checks if a row meets filter criteria.
-     * 
-     * @param {Object} row - Parsed JSON row
-     * @returns {boolean} True if row should be included
+     * Checks if a row meets filter criteria safely.
      */
     matchesFilter(row) {
         const filter = this.transformRules.filter;
         if (!filter || !filter.field) {
-            return true; // No filter specified, keep all rows
-        }
-
-        const value = row[filter.field];
-        if (value === undefined) {
             return true;
         }
 
-        // Numerical minimum check
-        if (filter.min !== undefined && Number(value) < Number(filter.min)) {
-            return false;
+        // Find matching key case-insensitively
+        const actualKey = Object.keys(row).find(k => k.toLowerCase() === filter.field.toLowerCase());
+        if (!actualKey) return true;
+
+        const val = row[actualKey];
+        if (val === undefined || val === "") return false;
+
+        // Numerical minimum comparison
+        if (filter.min !== undefined) {
+            const num = Number(val);
+            if (isNaN(num) || num < Number(filter.min)) {
+                return false;
+            }
         }
 
-        // Exact match check
-        if (filter.equals !== undefined && value.toLowerCase() !== String(filter.equals).toLowerCase()) {
-            return false;
+        // Exact match comparison
+        if (filter.equals !== undefined) {
+            if (String(val).toLowerCase() !== String(filter.equals).toLowerCase()) {
+                return false;
+            }
         }
 
         return true;
@@ -85,23 +90,22 @@ class CSVToJSONTransform extends Transform {
             this.buffer += chunk.toString();
             const lines = this.buffer.split("\n");
 
-            // Store the last incomplete line fragment in the buffer
+            // Keep the last incomplete fragment in the buffer
             this.buffer = lines.pop();
 
-            for (const line of lines) {
-                const trimmedLine = line.trim();
-                if (!trimmedLine) continue;
+            for (const rawLine of lines) {
+                const line = this.cleanLine(rawLine);
+                if (!line) continue; // Skip empty rows
 
-                // Header extraction
+                // Initialize headers from first row
                 if (!this.headers) {
-                    this.headers = trimmedLine.split(",").map(h => h.trim());
+                    this.headers = line.split(",").map(h => h.replace(/\r/g, "").trim());
                     continue;
                 }
 
-                const values = trimmedLine.split(",");
+                const values = line.split(",");
                 const row = this.createRow(values);
 
-                // Apply filter criteria
                 if (this.matchesFilter(row)) {
                     this.push(row);
                 }
@@ -115,11 +119,14 @@ class CSVToJSONTransform extends Transform {
 
     _flush(callback) {
         try {
-            if (this.buffer.trim() && this.headers) {
-                const values = this.buffer.trim().split(",");
-                const row = this.createRow(values);
-                if (this.matchesFilter(row)) {
-                    this.push(row);
+            if (this.buffer) {
+                const line = this.cleanLine(this.buffer);
+                if (line && this.headers) {
+                    const values = line.split(",");
+                    const row = this.createRow(values);
+                    if (this.matchesFilter(row)) {
+                        this.push(row);
+                    }
                 }
             }
             callback();
