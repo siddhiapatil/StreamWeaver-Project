@@ -2,64 +2,82 @@
  * ---------------------------------------------------------
  * ETL Service
  * ---------------------------------------------------------
- * Connects the Extract and Transform stages
- * of the ETL pipeline.
+ * Connects the full Extract -> Transform -> Load pipeline.
  */
 
 const { Readable } = require("stream");
 const { extractCSV } = require("../etl/extract");
 const { CSVToJSONTransform } = require("../etl/transform");
+const { loadData } = require("../etl/load");
 
 /**
- * Prepare the source information for ETL processing.
+ * Prepares the source details from the API request body.
  *
- * @param {Object} sourceData - Source information received from the API
- * @returns {Object} Prepared source information
+ * @param {Object} sourceData - Raw source payload
+ * @returns {Object} Normalized source configuration
  */
-const prepareSource = (sourceData) => {
+const prepareSource = (sourceData = {}) => {
     return {
-        sourceType: sourceData.sourceType,
-        sourcePath: sourceData.sourcePath
+        sourceType: sourceData.sourceType || sourceData.type || "csv",
+        sourcePath: sourceData.sourcePath || sourceData.path || ""
     };
 };
 
 /**
- * Connect the CSV source to the transformation stage.
+ * Executes the complete end-to-end ETL Pipeline.
  *
- * Flow:
- * Source → Extract → Transform
+ * 1. Extract: Reads the source CSV data via stream.
+ * 2. Transform: Pipes CSV chunks through CSVToJSONTransform.
+ * 3. Load: Writes the transformed JSON records to destination output.
  *
- * @param {Object} sourceConfig - CSV source configuration
- * @returns {Promise<Array>} Transformed records
+ * @param {Object} pipelineConfig - Contains source and destination configurations
+ * @returns {Promise<Object>} Execution summary
  */
-const processSourceToTransform = async (sourceConfig) => {
-    const csvData = await extractCSV({
-        type: sourceConfig.sourceType,
-        path: sourceConfig.sourcePath
+const runFullETLPipeline = async (pipelineConfig) => {
+    const { source, destination } = pipelineConfig;
+
+    // Step 1: Extract CSV source data
+    const rawCSV = await extractCSV({
+        type: source.sourceType || source.type || "csv",
+        path: source.sourcePath || source.path
     });
 
-    return new Promise((resolve, reject) => {
-        const input = Readable.from([csvData]);
-        const transform = new CSVToJSONTransform();
-        const transformedData = [];
+    // Step 2: Stream Transform CSV rows into JSON objects
+    const transformedRecords = await new Promise((resolve, reject) => {
+        const inputStream = Readable.from([rawCSV]);
+        const transformStream = new CSVToJSONTransform();
+        const records = [];
 
-        transform.on("data", (row) => {
-            transformedData.push(row);
+        transformStream.on("data", (row) => {
+            records.push(row);
         });
 
-        transform.on("end", () => {
-            resolve(transformedData);
+        transformStream.on("end", () => {
+            resolve(records);
         });
 
-        transform.on("error", (error) => {
-            reject(error);
+        transformStream.on("error", (err) => {
+            reject(err);
         });
 
-        input.pipe(transform);
+        inputStream.pipe(transformStream);
     });
+
+    // Step 3: Load transformed records into destination
+    const loadResult = await loadData(transformedRecords, destination);
+
+    return {
+        status: "Success",
+        recordsProcessed: transformedRecords.length,
+        source: {
+            type: source.sourceType || source.type || "csv",
+            path: source.sourcePath || source.path
+        },
+        destination: loadResult
+    };
 };
 
 module.exports = {
     prepareSource,
-    processSourceToTransform
+    runFullETLPipeline
 };

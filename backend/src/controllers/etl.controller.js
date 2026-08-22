@@ -2,21 +2,41 @@
  * ---------------------------------------------------------
  * ETL Controller
  * ---------------------------------------------------------
- * Receives ETL requests,
- * calls the ETL service,
- * and sends the response back to the client.
+ * Receives pipeline requests, invokes the ETL service,
+ * and returns the execution report to the client.
  */
 
-const { prepareSource } = require("../services/etl.service");
+const { runFullETLPipeline } = require("../services/etl.service");
 
-const processETL = (req, res) => {
-    const source = prepareSource(req.body);
+/**
+ * Handles POST /api/etl/process requests to run the ETL pipeline.
+ */
+const processETL = async (req, res, next) => {
+    try {
+        const { source, destination } = req.body;
 
-    res.json({
-        success: true,
-        message: "ETL module working",
-        source: source
-    });
+        // Validation: Verify source configuration is present
+        if (!source || (!source.sourcePath && !source.path)) {
+            return res.status(400).json({
+                success: false,
+                message: "Source configuration with 'sourcePath' or 'path' is required"
+            });
+        }
+
+        // Trigger the unified ETL pipeline
+        const result = await runFullETLPipeline({
+            source,
+            destination: destination || {}
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "ETL Pipeline executed successfully",
+            data: result
+        });
+    } catch (error) {
+        next(error);
+    }
 };
 
 module.exports = {
