@@ -5,9 +5,8 @@ node_modules/
 .env
 .env.*
 
-# Uploaded test files
-backend/uploads/*.csv
-!backend/uploads/etl-test.csv
+# Uploaded test outputs
+backend/uploads/*.json
 
 # Logs
 *.log

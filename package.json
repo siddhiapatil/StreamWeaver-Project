@@ -1,13 +1,15 @@
 {
   "name": "streamweaver",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "StreamWeaver: High-Throughput No-Code ETL Pipeline",
+  "main": "backend/server.js",
   "scripts": {
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["etl", "streams", "express", "nodejs"],
+  "author": "Siddhant Tambe",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {

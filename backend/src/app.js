@@ -2,22 +2,20 @@
  * ---------------------------------------------------------
  * Express Application Configuration
  * ---------------------------------------------------------
- * Configures middleware, routes, and application settings.
- * This file initializes the Express app.
+ * Initializes middleware, routes, and error handling.
  */
-
-
 
 const express = require("express");
 const uploadRoutes = require("./routes/upload.routes");
 const etlRoutes = require("./routes/etl.routes");
 const errorHandler = require("./middleware/errorHandler");
-console.log("APP.JS LOADED");
 
 const app = express();
 
+// Body Parser Middleware
 app.use(express.json());
 
+// Base Health Check
 app.get("/", (req, res) => {
     res.json({
         success: true,
@@ -25,9 +23,11 @@ app.get("/", (req, res) => {
     });
 });
 
+// Mount Application Routes
 app.use("/api", uploadRoutes);
 app.use("/api", etlRoutes);
 
+// Global Error Handler Middleware
 app.use(errorHandler);
 
 module.exports = app;
