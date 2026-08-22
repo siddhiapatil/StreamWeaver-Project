@@ -6,21 +6,23 @@
  * Extract → Transform → Load workflow.
  */
 
-const { createSource } = require("./extract");
-const { transformData } = require("./transform");
-const { loadData } = require("./load");
+const { createSource, extractCSV } = require("./extract");
+const { CSVToJSONTransform } = require("./transform");
+const { createDestination, loadData } = require("./load");
 
 /**
  * Creates the basic ETL pipeline structure.
  *
- * @param {Object} sourceConfig - Source configuration
+ * @param {Object} config - Pipeline configuration
  * @returns {Object} ETL pipeline information
  */
-const createETLPipeline = (sourceConfig) => {
-    const source = createSource(sourceConfig);
+const createETLPipeline = (config = {}) => {
+    const source = createSource(config.source || {});
+    const destination = createDestination(config.destination || {});
 
     return {
         source,
+        destination,
         stages: [
             "Extract",
             "Transform",
@@ -31,6 +33,9 @@ const createETLPipeline = (sourceConfig) => {
 
 module.exports = {
     createETLPipeline,
-    transformData,
+    createSource,
+    extractCSV,
+    CSVToJSONTransform,
+    createDestination,
     loadData
 };
