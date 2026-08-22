@@ -2,7 +2,7 @@
  * ---------------------------------------------------------
  * ETL Service
  * ---------------------------------------------------------
- * Connects the full Extract -> Transform -> Load pipeline.
+ * Connects the full Extract -> Transform (with Filters) -> Load pipeline.
  */
 
 const { Readable } = require("stream");
@@ -12,9 +12,6 @@ const { loadData } = require("../etl/load");
 
 /**
  * Prepares the source details from the API request body.
- *
- * @param {Object} sourceData - Raw source payload
- * @returns {Object} Normalized source configuration
  */
 const prepareSource = (sourceData = {}) => {
     return {
@@ -24,17 +21,13 @@ const prepareSource = (sourceData = {}) => {
 };
 
 /**
- * Executes the complete end-to-end ETL Pipeline.
+ * Executes the complete end-to-end ETL Pipeline with customizable transformations.
  *
- * 1. Extract: Reads the source CSV data via stream.
- * 2. Transform: Pipes CSV chunks through CSVToJSONTransform.
- * 3. Load: Writes the transformed JSON records to destination output.
- *
- * @param {Object} pipelineConfig - Contains source and destination configurations
+ * @param {Object} pipelineConfig - Contains source, transformation, and destination configs
  * @returns {Promise<Object>} Execution summary
  */
 const runFullETLPipeline = async (pipelineConfig) => {
-    const { source, destination } = pipelineConfig;
+    const { source, transformation = {}, destination = {} } = pipelineConfig;
 
     // Step 1: Extract CSV source data
     const rawCSV = await extractCSV({
@@ -42,10 +35,12 @@ const runFullETLPipeline = async (pipelineConfig) => {
         path: source.sourcePath || source.path
     });
 
-    // Step 2: Stream Transform CSV rows into JSON objects
+    // Step 2: Stream Transform CSV rows into JSON objects with filtering
     const transformedRecords = await new Promise((resolve, reject) => {
         const inputStream = Readable.from([rawCSV]);
-        const transformStream = new CSVToJSONTransform();
+        const transformStream = new CSVToJSONTransform({
+            transformRules: transformation
+        });
         const records = [];
 
         transformStream.on("data", (row) => {
@@ -73,6 +68,7 @@ const runFullETLPipeline = async (pipelineConfig) => {
             type: source.sourceType || source.type || "csv",
             path: source.sourcePath || source.path
         },
+        appliedTransformations: transformation,
         destination: loadResult
     };
 };

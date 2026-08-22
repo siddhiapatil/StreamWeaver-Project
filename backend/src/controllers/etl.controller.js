@@ -13,7 +13,7 @@ const { runFullETLPipeline } = require("../services/etl.service");
  */
 const processETL = async (req, res, next) => {
     try {
-        const { source, destination } = req.body;
+        const { source, transformation, destination } = req.body;
 
         // Validation: Verify source configuration is present
         if (!source || (!source.sourcePath && !source.path)) {
@@ -23,9 +23,10 @@ const processETL = async (req, res, next) => {
             });
         }
 
-        // Trigger the unified ETL pipeline
+        // Trigger the unified ETL pipeline with transformation rules
         const result = await runFullETLPipeline({
             source,
+            transformation: transformation || {},
             destination: destination || {}
         });
 
