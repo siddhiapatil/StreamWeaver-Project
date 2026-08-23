@@ -101,7 +101,7 @@ StreamWeaver/
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/Siddhant0570/StreamWeaver-Project.git](https://github.com/Siddhant0570/StreamWeaver-Project.git)
+   git clone [https://github.com/siddhiapatil/StreamWeaver-Project.git](https://github.com/siddhiapatil/StreamWeaver-Project.git)
    cd StreamWeaver-Project
 
 Install dependencies:
