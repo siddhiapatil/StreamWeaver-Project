@@ -1,4 +1,6 @@
-StreamWeaver:ETL Engine & API Pipeline is a high-throughput, memory-safe backend engine and secure API platform engineered for complex ETL (Extract, Transform, Load) pipelines[cite: 3]. Built with Node.js stream processing and a sandboxed execution environment, it handles dynamic transformation rules, dataset file uploads, and pipeline orchestration with strict JWT authentication, role-based pipeline management, and isolated JS script execution[cite: 3].🏗️ Core Architecture & Pipeline FlowPlaintext
+StreamWeaver:ETL Engine & API Pipeline is a high-throughput, memory-safe backend engine and secure API platform engineered for complex ETL (Extract, Transform, Load) pipelines. Built with Node.js stream processing and a sandboxed execution environment, it handles dynamic transformation rules, dataset file uploads, and pipeline orchestration with strict JWT authentication, role-based pipeline management, and isolated JS script execution.
+
+🏗️ Core Architecture & Pipeline FlowPlaintext
 
 
 
@@ -6,7 +8,6 @@ StreamWeaver:ETL Engine & API Pipeline is a high-throughput, memory-safe backend
                       │   Client / Frontend    │
                       └───────────┬────────────┘
                                   │ REST API (Bearer JWT)
-                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           StreamWeaver Engine                           │
 │                                                                         │
@@ -149,5 +150,4 @@ Backend Developer — StreamWeaver Platform
 
 
                       
-                      └────────────────────────┘
-Siddhi Patil
+                      
