@@ -1,43 +1,133 @@
 # StreamWeaver
 
-Memory-safe, no-code ETL for large CSV datasets. The platform streams uploads to disk, parses and transforms rows incrementally, executes approved user transformations in an isolate, and writes documents to MongoDB in efficient batches.
+A memory-safe, no-code ETL platform for processing large CSV datasets. StreamWeaver streams uploads to disk, incrementally parses and transforms rows, executes user transformations in isolated environments, and efficiently writes results to MongoDB.
+
+## 📋 Table of Contents
+
+- [Architecture](#architecture)
+- [Prerequisites](#prerequisites)
+- [Getting Started](#getting-started)
+- [API Documentation](#api-documentation)
+- [Safety & Performance](#safety--performance)
+- [Team Workflow](#team-workflow)
 
 ## Architecture
 
 ```text
-React upload + virtual preview -> Express/Busboy -> fs stream -> CSV parser
-                                                       -> Transform pipeline -> isolated-vm
-                                                       -> MongoDB bulkWrite
-                                                       -> Socket.IO progress events
+React Upload + Virtual Preview
+         ↓
+    Express/Busboy
+         ↓
+    FS Stream → CSV Parser → Transform Pipeline → Isolated VM
+         ↓
+   MongoDB BulkWrite
+         ↓
+   Socket.IO Progress Events
 ```
 
-## Start locally
+## Prerequisites
 
-1. Install Node.js **20 LTS** and MongoDB 7+. `isolated-vm` currently needs Node 20 on Windows (Node 24 does not provide the required prebuilt binary in this environment).
-2. Copy `backend/.env.example` to `backend/.env` and set `MONGODB_URI` and a long `JWT_SECRET`.
-3. Run `npm install` from this directory. `isolated-vm` is native; on Windows, if a prebuilt binary is unavailable, install Python 3 and the Visual Studio C++ build tools first. The API fails closed when the sandbox runtime is unavailable.
-4. Run `npm run dev --workspace=backend` and `npm run dev --workspace=frontend` in another terminal.
+- **Node.js** 20 LTS (required; Node 24 prebuilt binaries for `isolated-vm` unavailable on Windows)
+- **MongoDB** 7+
+- **Python 3** and Visual Studio C++ build tools (Windows only, if `isolated-vm` prebuilt binary unavailable)
 
-The frontend opens at `http://localhost:5173`; the API listens on `http://localhost:4000`.
+## Getting Started
 
-## Login API
+### 1. Install Dependencies
 
-`POST /api/auth/register`
-
-```json
-{"name":"Data Analyst","email":"analyst@example.com","password":"strong-password"}
+```bash
+npm install
 ```
 
-`POST /api/auth/login` accepts `email` and `password`, and returns a signed JWT and safe user profile. The React screen is a working manual test client for both endpoints.
+> **Note:** `isolated-vm` is a native module. On Windows, if prebuilt binaries are unavailable, ensure Python 3 and Visual Studio C++ build tools are installed first.
 
-## ETL safety and performance
+### 2. Configure Environment
 
-- Uploads are written with Busboy directly to `uploads/`; no full request body is loaded into memory.
-- CSV parsing, mapping, validation, and batching use Node streams.
-- Custom transformations must be expressions or functions that return a value. They run without Node globals and have a 50 ms execution timeout.
-- Every 1,000 rows is flushed using MongoDB `bulkWrite()`.
-- The preview is capped at 1,000 records and rendered with `react-virtualized`.
+Copy `backend/.env.example` to `backend/.env` and set:
 
-## Repository workflow
+```env
+MONGODB_URI=<your-mongodb-connection-string>
+JWT_SECRET=<a-long-random-secret>
+```
 
-For a team, create one branch per active member (`member-name`), commit meaningful work in that branch, and merge reviewed changes into `main`. The execution handbook requires team activity on 10 of the preceding 14 days for mid-review and each of the preceding 20 days for final review.
+### 3. Run Development Servers
+
+Start the backend:
+
+```bash
+npm run dev --workspace=backend
+```
+
+In another terminal, start the frontend:
+
+```bash
+npm run dev --workspace=frontend
+```
+
+**URLs:**
+- Frontend: `http://localhost:5173`
+- API: `http://localhost:4000`
+
+## API Documentation
+
+### Authentication
+
+#### Register
+
+```http
+POST /api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Data Analyst",
+  "email": "analyst@example.com",
+  "password": "strong-password"
+}
+```
+
+#### Login
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "email": "analyst@example.com",
+  "password": "strong-password"
+}
+```
+
+**Response:** Signed JWT token and safe user profile
+
+> The React frontend includes a working manual test client for both endpoints.
+
+## Safety & Performance
+
+### Memory Efficiency
+
+- Uploads are streamed directly to disk via Busboy; no full request body buffered in memory
+- CSV parsing, mapping, validation, and batching use Node streams
+
+### Transformation Security
+
+- Custom transformations are expressions or functions that return a value
+- Execution happens in isolated VM environments (no access to Node globals)
+- **Timeout:** 50 ms per transformation
+
+### Data Processing
+
+- MongoDB `bulkWrite()` flushes every 1,000 rows
+- Virtual preview capped at 1,000 records for performance (`react-virtualized`)
+
+## Team Workflow
+
+Organize team collaboration as follows:
+
+1. **Branch Strategy:** Create one branch per active team member (`member-name`)
+2. **Commits:** Make meaningful, atomic commits on your branch
+3. **Integration:** Submit pull requests for code review before merging into `main`
+4. **Activity:** Maintain regular team activity; the execution handbook requires 10 weeks of documented team contributions
+
+---
+
+**Built with:** React, Express, MongoDB, isolated-vm, Socket.IO
