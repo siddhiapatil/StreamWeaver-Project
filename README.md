@@ -1,153 +1,188 @@
-StreamWeaver:ETL Engine & API Pipeline is a high-throughput, memory-safe backend engine and secure API platform engineered for complex ETL (Extract, Transform, Load) pipelines. Built with Node.js stream processing and a sandboxed execution environment, it handles dynamic transformation rules, dataset file uploads, and pipeline orchestration with strict JWT authentication, role-based pipeline management, and isolated JS script execution.
+# StreamWeaver
 
-🏗️ Core Architecture & Pipeline FlowPlaintext
+A memory-safe, high-throughput no-code ETL platform for processing large CSV datasets. StreamWeaver streams file uploads directly to disk, incrementally parses and transforms rows using isolated sandboxed execution, and bulk-inserts processed data into MongoDB.
 
+## Project Description
 
+StreamWeaver is an ETL (Extract, Transform, Load) platform that enables users to:
+- Upload and stream large CSV files (up to 10GB) directly to disk without buffering in memory
+- Define field mappings and apply custom transformations to CSV data
+- Execute transformation logic safely in isolated VM environments (8MB memory, 50ms timeout)
+- Bulk-insert transformed data into MongoDB with live progress tracking via WebSocket
 
-                      ┌────────────────────────┐
-                      │   Client / Frontend    │
-                      └───────────┬────────────┘
-                                  │ REST API (Bearer JWT)
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           StreamWeaver Engine                           │
-│                                                                         │
-│  ┌─────────────────┐     ┌──────────────────────┐     ┌──────────────┐  │
-│  │ JWT Middleware  │ ──► │ Dynamic Pipeline     │ ──► │  Sandbox     │  │
-│  │ & Input Validation │  │ Orchestrator         │     │  Execution   │  │
-│  └─────────────────┘     └──────────────────────┘     └──────────────┘  │
-│                                     │                                   │
-│                                     ▼                                   │
-│  ┌─────────────────┐     ┌──────────────────────┐     ┌──────────────┐  │
-│  │ Extract (CSV)   │ ──► │ Transform Engine     │ ──► │ Load Writer  │  │
-│  │ Stream Reader   │     │ (Custom Rules/Code)  │     │ (JSON/DB)    │  │
-│  └─────────────────┘     └──────────────────────┘     └──────────────┘  │
-└─────────────────────────────────────┬───────────────────────────────────┘
-                                      │
-                                      ▼
-                      ┌────────────────────────┐
-                      | MongoDB / Local Disk   |
-                        ───────────────────────
+## Workflow
 
+```
+User Login (JWT Auth)
+        ↓
+Upload CSV File (Busboy Streaming)
+        ↓
+Define Field Mappings & Transformations
+        ↓
+Process Pipeline:
+  • CSV Parser → RowMapper → Isolated-VM Sandbox → BulkWriter → MongoDB
+        ↓
+Real-time Progress (WebSocket etl:{jobId})
+        ↓
+View Results (processed & inserted counts)
+```
 
-[1] Authentication & Validation Layer (/middleware/auth.js, /utils/validation.js): Intercepts requests using JSON Web Tokens (JWT) and validates incoming pipeline configurations against schemas prior to execution.
+## Features
 
-[2] Dynamic Pipeline Orchestrator (/services/etlPipeline.js): Manages end-to-end pipeline creation, updates, persistent Mongo models, and execution lifecycle.
+- **Streaming Upload**: CSV files streamed to disk via Busboy (10GB limit), not buffered in memory
+- **JWT Authentication**: Email/password login with bcryptjs hashing and 8-hour JWT tokens
+- **Field Mapping**: Map source CSV columns to destination MongoDB fields
+- **Isolated Transformations**: Custom async JavaScript code runs in isolated-vm (8MB memory, 50ms timeout, no Node globals)
+- **Batch Database Writes**: MongoDB bulk inserts in batches of 1,000 rows with unordered writes for speed
+- **Real-time Progress**: Socket.IO broadcasts progress on `etl:{jobId}` channel
+- **Virtual Preview**: React-virtualized table renders 1,000 sample rows efficiently
+- **Security**: Path traversal protection, MIME type validation, input validation, password hashing
 
-[3] Sandboxed Transformation Sandbox (/services/sandbox.js): Safely evaluates user-defined custom code snippets and complex row-level transformations within an isolated Node.js execution sandbox
+## Tech Stack
 
-[4] Stream Extract, Transform & Load (/etl/extract.js, /etl/transform.js, /etl/load.js): Processes large datasets chunk-by-chunk using non-blocking file streams to ensure zero V8 heap crashes during heavy file transformations.
+| Component | Technology |
+|-----------|-----------|
+| Frontend | React 18, Vite, React-Virtualized, Socket.IO Client |
+| Backend | Node.js 20 LTS, Express.js, Socket.IO, Busboy, csv-parse |
+| Database | MongoDB 7+ |
+| Security | isolated-vm, bcryptjs, JWT |
+| Tools | Helmet, CORS, dotenv, crypto |
 
-🔑 Key Features & Technical Highlights
-🔐 Secure User Authentication & Pipeline Control: Complete JWT-based auth flow (/routes/auth.js) backed by encrypted user credentials in MongoDB.
+## Prerequisites
 
-🧪 Isolated JavaScript Sandbox: Securely run dynamic custom transformation scripts on incoming data records without risking server process compromise (/services/sandbox.js).
+- Node.js 20 LTS
+- MongoDB 7+
+- Python 3 & Visual Studio C++ build tools (Windows only, for isolated-vm)
 
-⚡ High-Throughput Streaming Engine: Memory-safe stream processing pipelines for massive dataset handling (/services/etl.service.js).
+## Getting Started
 
-🛡️ Robust Validation & Error Handling: Centralized custom AppError class and input validation middleware to catch failed stages gracefully (/utils/AppError.js).
+### 1. Install Dependencies
 
-🧪 End-to-End Integration Testing: Integration test suites written for pipeline controllers and validation rules (/test/pipelines.integration.test.js).
+```bash
+npm install
+```
 
+### 2. Configure Environment
 
-StreamWeaver-Project/
-├── package.json
-├── README.md
-├── docs/
-│   └── PROJECT_FLOW.md
+Create `backend/.env`:
+
+```env
+PORT=4000
+MONGODB_URI=mongodb://127.0.0.1:27017/streamweaver
+JWT_SECRET=your-secret-key-here
+CLIENT_ORIGIN=http://localhost:5173
+UPLOAD_DIR=uploads
+```
+
+### 3. Run Development Servers
+
+Backend:
+```bash
+npm run dev --workspace=backend
+```
+
+Frontend (separate terminal):
+```bash
+npm run dev --workspace=frontend
+```
+
+**URLs:**
+- Frontend: http://localhost:5173
+- API: http://localhost:4000
+
+## API Endpoints
+
+### Authentication (Public)
+
+**POST /api/auth/register**
+```json
+{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "password": "password123"
+}
+```
+
+**POST /api/auth/login**
+```json
+{
+  "email": "john@example.com",
+  "password": "password123"
+}
+```
+
+### ETL (Protected - Requires JWT Bearer Token)
+
+**POST /api/etl/upload**
+- Upload CSV file (multipart/form-data)
+- Returns: `{ jobId, file }`
+
+**POST /api/etl/:jobId/process**
+```json
+{
+  "mappings": [
+    {
+      "source": "firstName",
+      "destination": "first_name",
+      "transform": "async (value) => value.toUpperCase()"
+    }
+  ]
+}
+```
+- Returns: `{ jobId, processed, inserted }`
+
+## Project Structure
+
+```
+StreamWeaver/
+├── backend/
+│   ├── src/
+│   │   ├── server.js              # Entry point
+│   │   ├── app.js                 # Express configuration
+│   │   ├── config/env.js          # Environment variables
+│   │   ├── middleware/auth.js     # JWT verification
+│   │   ├── models/User.js         # User schema
+│   │   ├── routes/
+│   │   │   ├── auth.js            # Register/Login endpoints
+│   │   │   └── etl.js             # Upload/Process endpoints
+│   │   └── services/
+│   │       ├── etlPipeline.js     # RowMapper, BulkWriter, processCsv
+│   │       └── sandbox.js         # isolated-vm execution
+│   ├── .env.example
+│   └── package.json
+│
 ├── frontend/
+│   ├── src/
+│   │   ├── main.jsx               # React components (Login, Preview)
+│   │   └── styles.css
 │   ├── index.html
-│   ├── package.json
-│   ├── vite.config.js
-│   └── src/
-│       ├── main.jsx
-│       └── styles.css
-└── StreamWeaver API Pipeline/
-    └── backend/
-        ├── server.js
-        ├── package.json
-        ├── src/
-        │   ├── app.js
-        │   ├── config/
-        │   │   └── env.js
-        │   ├── middleware/
-        │   │   └── auth.js
-        │   ├── models/
-        │   │   ├── Pipeline.js
-        │   │   └── User.js
-        │   ├── routes/
-        │   │   ├── auth.js
-        │   │   ├── etl.js
-        │   │   └── pipelines.js
-        │   ├── services/
-        │   │   ├── etlPipeline.js
-        │   │   └── sandbox.js
-        │   └── utils/
-        │       ├── AppError.js
-        │       └── validation.js
-        └── test/
-            ├── pipelines.integration.test.js
-            └── validation.test.js
+│   └── package.json
+│
+└── package.json (monorepo config)
+```
 
+## How It Works
 
+1. **User registers/logs in** → JWT token issued
+2. **User uploads CSV** → Busboy streams file to disk, returns jobId
+3. **User defines mappings** → POST to /:jobId/process
+4. **Backend processes**:
+   - Opens CSV as stream
+   - RowMapper applies mappings & transformations (via isolated-vm)
+   - BulkWriter batches 1,000 rows and inserts to MongoDB collection `etl_{jobId}`
+   - Socket.IO emits progress on `etl:{jobId}` channel
+5. **Frontend displays** → Real-time progress + final counts
 
-🚀 Setup & Execution
-Prerequisites
-Node.js (v18 or higher)
+## WebSocket Events
 
-MongoDB instance (Local or Atlas MongoDB URI)
+Subscribe to `etl:{jobId}` channel:
+```javascript
+socket.on('etl:{jobId}', (message) => {
+  // { status: 'started' }
+  // { processed: N, inserted: M }
+  // { status: 'complete', processed: N, inserted: M }
+});
+```
 
-npm 
-
-
-Clone the repository:
-
-Bash
-git clone https://github.com/SiddhiPatil/StreamWeaver-Project.git
-cd StreamWeaver-Project
-Configure Environment Variables:
-Create a .env file in StreamWeaver API Pipeline/backend/:
-
-Code 
-PORT=5000
-MONGODB_URI=mongodb://localhost:27017/streamweaver
-JWT_SECRET=your_jwt_secret_key
-Install Dependencies:
-
-Bash
-# Install backend dependencies
-cd "StreamWeaver API Pipeline/backend"
-npm install
-
-# Install frontend dependencies
-cd ../../frontend
-npm install
-Start Application:
-
-Bash
-# Start Backend API Server
-cd "../StreamWeaver API Pipeline/backend"
-npm run dev
-
-# Start Frontend UI
-cd ../../frontend
-npm run dev
-
-
-👩‍💻 Author
-Siddhi Patil
-Backend Developer — StreamWeaver Platform
-
-
-
-
-
-
-                        
-
-
-
-
-
-
-                      
-                      
+Author
+Siddhi Patil - Backend (StremWeaver)
