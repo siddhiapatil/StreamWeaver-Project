@@ -1,436 +1,135 @@
 # StreamWeaver
 
+A memory-safe, high-throughput no-code ETL platform for processing large CSV datasets. StreamWeaver streams file uploads directly to disk, incrementally parses and transforms rows using isolated sandboxed execution, and bulk-inserts processed data into MongoDB.
+
 ## Project Description
 
-**StreamWeaver** is a memory-safe, high-throughput no-code ETL (Extract, Transform, Load) platform designed for processing large CSV datasets efficiently. It enables users to upload massive CSV files without overwhelming server memory, apply custom transformations securely in isolated sandboxed environments, and batch-insert millions of rows into MongoDB with real-time progress tracking.
+StreamWeaver is an ETL (Extract, Transform, Load) platform that enables users to:
+- Upload and stream large CSV files (up to 10GB) directly to disk without buffering in memory
+- Define field mappings and apply custom transformations to CSV data
+- Execute transformation logic safely in isolated VM environments (8MB memory, 50ms timeout)
+- Bulk-insert transformed data into MongoDB with live progress tracking via WebSocket
 
-The platform is built for data engineers, analysts, and non-technical users who need to:
-- Upload and stream large CSV files (up to 10GB) directly to disk
-- Define field mappings and apply transformations to CSV data
-- Execute custom transformation logic safely in isolated VM environments
-- Bulk-insert transformed data into MongoDB with live progress updates
-- Monitor ETL jobs via real-time WebSocket events
-
----
-
-## How StreamWeaver Works
-
-### Workflow Flowchart
+## Workflow
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         USER AUTHENTICATION                           │
-│                                                                        │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │ Frontend: Login/Register Form                                   │ │
-│  │ • Email validation, minimum 8-char password                     │ │
-│  │ • POST /api/auth/register or POST /api/auth/login               │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                 ↓                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │ Backend: JWT Token Generation                                   │ │
-│  │ • bcryptjs password hashing & verification                      │ │
-│  │ • Generate 8-hour expiring JWT token                            │ │
-│  │ • Return token + user profile                                   │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                 ↓                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │ Frontend: Store JWT in localStorage                             │ │
-│  │ • Use for Authorization: Bearer <token> header                  │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────┘
-                                 ↓
-┌──────────────────────────────────────────────────────────────────────┐
-│                      CSV FILE UPLOAD (STREAMING)                      │
-│                                                                        │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │ Frontend: User selects CSV file                                 │ │
-│  │ • POST /api/etl/upload (multipart/form-data)                    │ │
-│  │ • Requires JWT Bearer token in Authorization header             │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                 ↓                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │ Backend: Busboy Stream Handler                                  │ │
-│  │ • Validate MIME type (text/csv) & .csv extension                │ │
-│  │ • Generate unique UUID jobId                                    │ │
-│  │ • Stream file to disk at uploads/{jobId}.csv                    │ │
-│  │ • File size limit: 10 GB                                        │ │
-│  │ • Return 202 Accepted with jobId                                │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                 ↓                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │ Frontend: Receive jobId                                         │ │
-│  │ • User proceeds to transform step                               │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────┘
-                                 ↓
-┌──────────────────────────────────────────────────────────────────────┐
-│                    ETL TRANSFORMATION & PROCESSING                    │
-│                                                                        │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │ Frontend: Define Field Mappings                                 │ │
-│  │ • Map source CSV columns to destination fields                  │ │
-│  │ • Define transformation expressions (async JavaScript)          │ │
-│  │ • POST /api/etl/:jobId/process with mappings array              │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                 ↓                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │ Backend: Validate Request                                       │ │
-│  │ • Check file exists in uploadDir                                │ │
-│  │ • Validate mappings (source + destination required)             │ │
-│  │ • Path traversal protection                                     │ │
-│  │ • Emit Socket.IO 'started' event on etl:{jobId}                 │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                 ↓                                      │
-│  ┌──────── ETL PIPELINE (Node Streams) ──────────────────────────┐   │
-│  │                                                                  │   │
-│  │  1. CSV Parser (csv-parse)                                      │   │
-│  │     └─ Read file stream, parse rows with headers                │   │
-│  │                                                                  │   │
-│  │  2. RowMapper (Transform stream)                                │   │
-│  │     └─ For each row:                                            │   │
-│  │        • Apply field mappings                                   │   │
-│  │        • Call transformValue() for each mapping                 │   │
-│  │        • Execute in isolated-vm sandbox                         │   │
-│  │        • Emit progress every 100 rows                           │   │
-│  │                                                                  │   │
-│  │  3. BulkWriter (Writable stream)                                │   │
-│  │     └─ Batch transformed rows (default 1000 per batch)          │   │
-│  │        • On batch complete: collection.bulkWrite()              │   │
-│  │        • Ordered: false (max throughput)                        │   │
-│  │        • Create dynamic collection etl_{jobId}                  │   │
-│  │        • Emit inserted count to Socket.IO                       │   │
-│  │                                                                  │   │
-│  └──────────────────────────────────────────────────────────────────┘ │
-│                                 ↓                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │ Isolated-VM Sandbox (Per Transformation)                        │ │
-│  │ • Memory limit: 8 MB per context                                │ │
-│  │ • Execution timeout: 50 ms                                      │ │
-│  │ • No access to Node.js globals (require, process, etc)          │ │
-│  │ • Provides: value (current field), row (full row data)          │ │
-│  │ • Returns: transformed result via copyInto()                    │ │
-│  │ • Disposes context immediately to prevent leaks                 │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                 ↓                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │ MongoDB Bulk Insert                                             │ │
-│  │ • Dynamic collection: etl_{jobId} (hyphens removed)             │ │
-│  │ • insertOne operation per document                              │ │
-│  │ • Batch size: 1000 rows (configurable)                          │ │
-│  │ • All-or-nothing semantics per batch                            │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                 ↓                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │ Backend: Stream Completion                                      │ │
-│  │ • Return { jobId, processed, inserted }                         │ │
-│  │ • Emit Socket.IO 'complete' event with counts                   │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                 ↓                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │ Frontend: Display Results                                       │ │
-│  │ • Show transformation progress in real-time                     │ │
-│  │ • Display final counts: processed & inserted rows               │ │
-│  │ • Virtual preview table updated with sample data                │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────┘
-                                 ↓
-┌──────────────────────────────────────────────────────────────────────┐
-│                    REAL-TIME PROGRESS (WebSocket)                     │
-│                                                                        │
-│  Socket.IO named channel: etl:{jobId}                                 │
-│  Events:                                                              │
-│  • { status: 'started' } - Processing initiated                       │
-│  • { processed: N, inserted: M } - Progress updates                   │
-│  • { status: 'complete', processed: N, inserted: M } - Final result   │
-│                                                                        │
-│  Frontend subscribes to socket.on('etl:{jobId}', ...)                 │
-│  for live progress tracking                                           │
-└──────────────────────────────────────────────────────────────────────┘
+User Login (JWT Auth)
+        ↓
+Upload CSV File (Busboy Streaming)
+        ↓
+Define Field Mappings & Transformations
+        ↓
+Process Pipeline:
+  • CSV Parser → RowMapper → Isolated-VM Sandbox → BulkWriter → MongoDB
+        ↓
+Real-time Progress (WebSocket etl:{jobId})
+        ↓
+View Results (processed & inserted counts)
 ```
-
----
 
 ## Features
 
-### ✅ Core Capabilities
-
-- **Memory-Efficient Streaming**
-  - CSV files streamed directly to disk via Busboy
-  - No full request body buffered in memory
-  - Supports files up to 10 GB
-
-- **JWT-Based Authentication**
-  - Email/password registration with validation
-  - 8-hour expiring JWT tokens
-  - Bearer token authentication on protected routes
-  - Secure password hashing with bcryptjs
-
-- **Field Mapping & Transformation**
-  - Map source CSV columns to destination MongoDB fields
-  - Define custom async JavaScript transformation expressions
-  - Access full row data within transformations
-  - Error handling per row (graceful degradation)
-
-- **Sandboxed Code Execution**
-  - Isolated-vm environment with 8 MB memory limit
-  - 50 ms execution timeout per transformation
-  - No access to Node.js globals or filesystem
-  - Protection against malicious code
-
-- **High-Throughput Database Operations**
-  - MongoDB bulk inserts in batches of 1,000 rows
-  - Unordered writes for maximum speed
-  - Dynamic collection per job (etl_{jobId})
-  - All-or-nothing batch semantics
-
-- **Real-Time Progress Tracking**
-  - Socket.IO WebSocket broadcasting
-  - Named channels per job (etl:{jobId})
-  - Live processing & insertion counts
-  - Status events (started, complete)
-
-- **Virtualized UI Preview**
-  - React-virtualized table (1,000 rows)
-  - Only visible rows rendered to DOM
-  - Minimal memory footprint
-  - Responsive and performant
-
-### 🔒 Security Features
-
-- **Path Traversal Protection**: File access confined to uploadDir
-- **MIME Type Validation**: Only accepts text/csv files
-- **Input Validation**: Email format, password length, CSV extension
-- **Rate Limiting Ready**: Helmet security headers enabled
-- **CORS Protection**: Origin validation via environment config
-- **JSON Size Limiting**: 64 KB JSON request limit
-
----
+- **Streaming Upload**: CSV files streamed to disk via Busboy (10GB limit), not buffered in memory
+- **JWT Authentication**: Email/password login with bcryptjs hashing and 8-hour JWT tokens
+- **Field Mapping**: Map source CSV columns to destination MongoDB fields
+- **Isolated Transformations**: Custom async JavaScript code runs in isolated-vm (8MB memory, 50ms timeout, no Node globals)
+- **Batch Database Writes**: MongoDB bulk inserts in batches of 1,000 rows with unordered writes for speed
+- **Real-time Progress**: Socket.IO broadcasts progress on `etl:{jobId}` channel
+- **Virtual Preview**: React-virtualized table renders 1,000 sample rows efficiently
+- **Security**: Path traversal protection, MIME type validation, input validation, password hashing
 
 ## Tech Stack
 
-### Frontend
-- **React 18** - UI library with hooks
-- **Vite** - Modern bundler with hot module replacement
-- **React-Virtualized** - Virtual rendering for large lists
-- **Socket.IO Client** - Real-time WebSocket communication
-
-### Backend
-- **Node.js 20 LTS** - JavaScript runtime
-- **Express.js** - Web framework with middleware support
-- **Socket.IO** - WebSocket server for real-time events
-- **Busboy** - Streaming multipart/form-data parser
-- **csv-parse** - Incremental CSV parser
-- **Mongoose** - MongoDB object modeling
-- **isolated-vm** - Sandboxed JavaScript VM
-- **bcryptjs** - Password hashing with salt
-- **jsonwebtoken** - JWT token generation & verification
-- **Helmet** - Security headers middleware
-- **CORS** - Cross-origin resource sharing
-
-### Database
-- **MongoDB 7+** - NoSQL document database
-  - Dynamic collections per ETL job
-  - Bulk write operations for efficiency
-
-### Development Tools
-- **dotenv** - Environment variable management
-- **crypto (Node.js built-in)** - UUID generation for jobIds
-
----
+| Component | Technology |
+|-----------|-----------|
+| Frontend | React 18, Vite, React-Virtualized, Socket.IO Client |
+| Backend | Node.js 20 LTS, Express.js, Socket.IO, Busboy, csv-parse |
+| Database | MongoDB 7+ |
+| Security | isolated-vm, bcryptjs, JWT |
+| Tools | Helmet, CORS, dotenv, crypto |
 
 ## Prerequisites
 
-Before running StreamWeaver, ensure you have:
+- Node.js 20 LTS
+- MongoDB 7+
+- Python 3 & Visual Studio C++ build tools (Windows only, for isolated-vm)
 
-- **Node.js** 20 LTS (required; Node 24 missing `isolated-vm` prebuilt on Windows)
-- **MongoDB** 7+ (local or cloud instance)
-- **npm** 10+ (Node package manager)
-- **Python 3** & Visual Studio C++ build tools (Windows only, for native module compilation)
+## Getting Started
 
----
-
-## Installation & Setup
-
-### Step 1: Clone the Repository
-
-```bash
-git clone https://github.com/siddhiapatil/StreamWeaver-Project.git
-cd StreamWeaver-Project
-```
-
-### Step 2: Install Dependencies
-
-Install all dependencies for both backend and frontend workspaces:
+### 1. Install Dependencies
 
 ```bash
 npm install
 ```
 
-### Step 3: Configure Environment Variables
+### 2. Configure Environment
 
-Create a `.env` file in the `backend/` directory:
-
-```bash
-cp backend/.env.example backend/.env
-```
-
-Edit `backend/.env` with your configuration:
+Create `backend/.env`:
 
 ```env
 PORT=4000
 MONGODB_URI=mongodb://127.0.0.1:27017/streamweaver
-JWT_SECRET=your-long-random-secret-key-here-min-32-chars
+JWT_SECRET=your-secret-key-here
 CLIENT_ORIGIN=http://localhost:5173
 UPLOAD_DIR=uploads
 ```
 
-**Environment Variables Explained:**
-- `PORT`: Backend server port (default: 4000)
-- `MONGODB_URI`: MongoDB connection string
-- `JWT_SECRET`: Secret key for JWT token signing (required, throws error if missing)
-- `CLIENT_ORIGIN`: Frontend URL for CORS validation
-- `UPLOAD_DIR`: Directory for CSV file uploads (created if doesn't exist)
+### 3. Run Development Servers
 
-### Step 4: Start MongoDB
-
-Ensure MongoDB is running (local or cloud):
-
-```bash
-# Local MongoDB (if installed)
-mongod
-```
-
-Or use MongoDB Atlas for cloud deployment.
-
-### Step 5: Start Development Servers
-
-**Terminal 1 - Start Backend:**
-
+Backend:
 ```bash
 npm run dev --workspace=backend
 ```
 
-Expected output:
-```
-StreamWeaver API listening on :4000
-```
-
-**Terminal 2 - Start Frontend:**
-
+Frontend (separate terminal):
 ```bash
 npm run dev --workspace=frontend
 ```
 
-Expected output:
-```
-Local: http://localhost:5173
-```
-
-### Step 6: Access the Application
-
-- **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:4000
-- **API Health Check**: http://localhost:4000/health
-
----
-
-## Running Tests
-
-Run the test suite:
-
-```bash
-npm run test --workspace=backend
-```
-
----
+**URLs:**
+- Frontend: http://localhost:5173
+- API: http://localhost:4000
 
 ## API Endpoints
 
-### Authentication Routes (Public)
+### Authentication (Public)
 
-#### Register
-```bash
-POST /api/auth/register
-Content-Type: application/json
-
+**POST /api/auth/register**
+```json
 {
   "name": "John Doe",
   "email": "john@example.com",
-  "password": "securepassword123"
-}
-
-Response (201):
-{
-  "token": "eyJhbGc...",
-  "user": { "id": "...", "name": "John Doe", "email": "john@example.com" }
+  "password": "password123"
 }
 ```
 
-#### Login
-```bash
-POST /api/auth/login
-Content-Type: application/json
-
+**POST /api/auth/login**
+```json
 {
   "email": "john@example.com",
-  "password": "securepassword123"
-}
-
-Response (200):
-{
-  "token": "eyJhbGc...",
-  "user": { "id": "...", "name": "John Doe", "email": "john@example.com" }
+  "password": "password123"
 }
 ```
 
-### ETL Routes (Protected - Requires JWT Bearer Token)
+### ETL (Protected - Requires JWT Bearer Token)
 
-#### Upload CSV File
-```bash
-POST /api/etl/upload
-Authorization: Bearer <jwt-token>
-Content-Type: multipart/form-data
+**POST /api/etl/upload**
+- Upload CSV file (multipart/form-data)
+- Returns: `{ jobId, file }`
 
-file: <csv-file>
-
-Response (202):
-{
-  "jobId": "550e8400-e29b-41d4-a716-446655440000",
-  "file": "/absolute/path/to/uploads/550e8400-e29b-41d4-a716-446655440000.csv"
-}
-```
-
-#### Process & Transform
-```bash
-POST /api/etl/:jobId/process
-Authorization: Bearer <jwt-token>
-Content-Type: application/json
-
+**POST /api/etl/:jobId/process**
+```json
 {
   "mappings": [
     {
       "source": "firstName",
       "destination": "first_name",
       "transform": "async (value) => value.toUpperCase()"
-    },
-    {
-      "source": "age",
-      "destination": "age_group",
-      "transform": "async (value) => value < 18 ? 'minor' : 'adult'"
     }
   ]
 }
-
-Response (200):
-{
-  "jobId": "550e8400-e29b-41d4-a716-446655440000",
-  "processed": 10000,
-  "inserted": 10000
-}
 ```
-
----
+- Returns: `{ jobId, processed, inserted }`
 
 ## Project Structure
 
@@ -438,167 +137,52 @@ Response (200):
 StreamWeaver/
 ├── backend/
 │   ├── src/
-│   │   ├── server.js                 # Entry point, MongoDB + Socket.IO setup
-│   │   ├── app.js                    # Express app configuration
-│   │   ├── config/
-│   │   │   └── env.js                # Environment variables validation
-│   │   ├── middleware/
-│   │   │   └── auth.js               # JWT Bearer token verification
-│   │   ├── models/
-│   │   │   └── User.js               # Mongoose User schema
+│   │   ├── server.js              # Entry point
+│   │   ├── app.js                 # Express configuration
+│   │   ├── config/env.js          # Environment variables
+│   │   ├── middleware/auth.js     # JWT verification
+│   │   ├── models/User.js         # User schema
 │   │   ├── routes/
-│   │   │   ├── auth.js               # /register, /login endpoints
-│   │   │   └── etl.js                # /upload, /:jobId/process endpoints
+│   │   │   ├── auth.js            # Register/Login endpoints
+│   │   │   └── etl.js             # Upload/Process endpoints
 │   │   └── services/
-│   │       ├── etlPipeline.js        # RowMapper, BulkWriter, processCsv
-│   │       └── sandbox.js            # isolated-vm transformation execution
-│   ├── .env.example                  # Environment variables template
+│   │       ├── etlPipeline.js     # RowMapper, BulkWriter, processCsv
+│   │       └── sandbox.js         # isolated-vm execution
+│   ├── .env.example
 │   └── package.json
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── main.jsx                  # React entry point (Login + Preview)
-│   │   └── styles.css                # UI styling
+│   │   ├── main.jsx               # React components (Login, Preview)
+│   │   └── styles.css
 │   ├── index.html
-│   ├── vite.config.js
 │   └── package.json
 │
-├── package.json                      # Monorepo workspace config
-└── README.md
+└── package.json (monorepo config)
 ```
 
----
+## How It Works
 
-## Usage Example
+1. **User registers/logs in** → JWT token issued
+2. **User uploads CSV** → Busboy streams file to disk, returns jobId
+3. **User defines mappings** → POST to /:jobId/process
+4. **Backend processes**:
+   - Opens CSV as stream
+   - RowMapper applies mappings & transformations (via isolated-vm)
+   - BulkWriter batches 1,000 rows and inserts to MongoDB collection `etl_{jobId}`
+   - Socket.IO emits progress on `etl:{jobId}` channel
+5. **Frontend displays** → Real-time progress + final counts
 
-### Complete Workflow
+## WebSocket Events
 
-1. **Register User**
-   ```bash
-   curl -X POST http://localhost:4000/api/auth/register \
-     -H "Content-Type: application/json" \
-     -d '{"name":"Alice","email":"alice@example.com","password":"password123"}'
-   ```
-
-2. **Login & Get Token**
-   ```bash
-   curl -X POST http://localhost:4000/api/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{"email":"alice@example.com","password":"password123"}'
-   # Response includes: { "token": "eyJhbGc...", "user": {...} }
-   ```
-
-3. **Upload CSV File**
-   ```bash
-   curl -X POST http://localhost:4000/api/etl/upload \
-     -H "Authorization: Bearer <your-jwt-token>" \
-     -F "file=@data.csv"
-   # Response: { "jobId": "550e8400-...", "file": "/path/to/file.csv" }
-   ```
-
-4. **Process & Transform**
-   ```bash
-   curl -X POST http://localhost:4000/api/etl/550e8400-/process \
-     -H "Authorization: Bearer <your-jwt-token>" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "mappings": [
-         {"source":"col1","destination":"column_1"},
-         {"source":"col2","destination":"column_2"}
-       ]
-     }'
-   # Response: { "jobId": "550e8400-...", "processed": 5000, "inserted": 5000 }
-   ```
-
-5. **Monitor Progress (WebSocket)**
-   ```javascript
-   // Frontend code
-   import io from 'socket.io-client';
-   const socket = io('http://localhost:4000');
-   socket.on('etl:550e8400-...', (message) => {
-     console.log(message); // { status: 'started' } or { processed: 100, inserted: 100 } etc
-   });
-   ```
-
----
-
-## Deployment
-
-### Production Build
-
-```bash
-# Build frontend
-npm run build --workspace=frontend
-
-# Run backend in production
-npm run start --workspace=backend
+Subscribe to `etl:{jobId}` channel:
+```javascript
+socket.on('etl:{jobId}', (message) => {
+  // { status: 'started' }
+  // { processed: N, inserted: M }
+  // { status: 'complete', processed: N, inserted: M }
+});
 ```
-
-### Environment Configuration
-Set environment variables in your hosting platform (Heroku, AWS, etc.):
-- `MONGODB_URI` - Production MongoDB URI
-- `JWT_SECRET` - Strong random secret (32+ characters)
-- `CLIENT_ORIGIN` - Production frontend URL
-- `PORT` - Server port (default: 4000)
-
----
-
-## Troubleshooting
-
-### MongoDB Connection Error
-- Ensure MongoDB service is running
-- Verify `MONGODB_URI` in `.env` matches your setup
-- Check MongoDB network access if using Atlas
-
-### isolated-vm Build Issues (Windows)
-- Install Python 3 from python.org
-- Install Visual Studio C++ build tools
-- Run: `npm install --build-from-source`
-
-### JWT Token Expired
-- Tokens expire in 8 hours
-- Users must login again to get a new token
-
-### File Upload Size Limit
-- Default limit is 10 GB via Busboy
-- Modify `fileSize` in `backend/src/routes/etl.js` if needed
-
----
-
-## Performance & Scalability
-
-- **Memory**: Streaming architecture prevents memory bloat even with multi-gigabyte files
-- **Throughput**: Bulk inserts handle 1,000+ rows/second
-- **Concurrency**: Multiple simultaneous uploads via jobId-based isolation
-- **Transformation**: 50ms timeout prevents long-running code
-- **Database**: Dynamic collections per job allow parallel processing
-
----
-
-## Security Best Practices
-
-1. ✅ Use strong JWT_SECRET (32+ random characters)
-2. ✅ Enable HTTPS in production
-3. ✅ Validate file uploads (MIME type + extension)
-4. ✅ Use CORS for trusted origins only
-5. ✅ Regularly update Node.js and dependencies
-6. ✅ Monitor isolated-vm resource limits
-7. ✅ Hash passwords with bcryptjs (done automatically)
-
----
-
-## Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request with description
-
----
-
-## License
-
-This project is open source under the MIT License.
 
 ---
 
