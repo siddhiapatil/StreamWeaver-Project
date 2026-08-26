@@ -47,15 +47,18 @@ GET /health → health check (app.js)
 /api/auth → authentication routes (authRouter)
 /api/etl → ETL control and status routes (etlRouter) — mounted with authentication
 /api/* upload and ETL routes (uploadRoutes and etlRoutes appear in one app.js variant)
+
 Team contributions 
 
 Akiti-Shravani (branch: Akiti-Shravani)
 
 Frontend design & implementation: React UI, Login, Dashboard, Navbar, Sidebar, Dataset Upload UI, Pipeline Builder (source / transform / destination), CSV/JSON validation, upload progress, API integration.
 Files referenced: frontend/src/*, public/, Vite config, reusable components and pages.
+
 Siddhant (branch: Siddhant)
 
 Backend structure and routes (backend/), ETL scaffolding, server wiring and integration work — backend folder exists in this branch with server and route code.
+
 Nikhil (branch: Nikhil)
 
 Project-level README and initial proposal content (README.md on Nikhil branch).
