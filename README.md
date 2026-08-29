@@ -186,3 +186,22 @@ socket.on('etl:{jobId}', (message) => {
 
 Author
 Siddhi Patil - Backend (StremWeaver)
+
+## Week 3 – Pipeline Run API
+
+### Trigger
+`POST /api/pipelines/:pipelineId/run`
+
+```json
+{ "sourceJobId": "550e8400-e29b-41d4-a716-446655440000" }
+```
+
+Returns **202 Accepted** with `RUNNING`. Final statuses are `SUCCESS` or `FAILED`.
+
+### Monitor
+`GET /api/pipelines/:pipelineId/runs/:runId`
+
+### Execution flow
+`CSV Source → Transformation Mapping/Sandbox → MongoDB Destination`
+
+Execution is streaming/batch based, defaults to 1,000-row MongoDB batches, and enforces a 60,000-row limit per run. Structured logs are written to `backend/logs/pipeline-runs.log`.

@@ -6,3 +6,15 @@ uploads/
 coverage/
 dist/
 
+
+# StreamWeaver runtime data
+backend/logs/*.log
+backend/uploads/
+backend/test-uploads/
+backend/test-logs/
+
+# StreamWeaver runtime data
+backend/logs/*.log
+backend/uploads/
+backend/test-uploads/
+backend/test-logs/
