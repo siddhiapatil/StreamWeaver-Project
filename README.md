@@ -1,3 +1,10 @@
+
+
+
+
+
+
+
 # 🌊 StreamWeaver: High-Throughput No-Code ETL Pipeline
 
 StreamWeaver is a web-based **No-Code ETL (Extract, Transform, Load) platform** designed to simplify the processing of large CSV and JSON datasets through a visual interface.
@@ -27,7 +34,9 @@ The frontend provides an interactive interface for dataset upload, pipeline conf
                    Axios
                      │
                      ▼
-              Express BackendThe frontend is organized into reusable components and page-level modules.
+              Express Backend
+             
+The frontend is organized into reusable components and page-level modules.
 
 Main Frontend Modules
 Login – User login interface and validation.
