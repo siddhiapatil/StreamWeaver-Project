@@ -1,0 +1,34 @@
+:root { font-family: Inter, system-ui, sans-serif; color: #e8f0ff; background: #09111e; } * { box-sizing: border-box; } main { display: grid; grid-template-columns: 360px minmax(450px, 760px); gap: 28px; max-width: 1180px; margin: 60px auto; padding: 0 24px; } .card,.preview { padding: 26px; border: 1px solid #203350; border-radius: 16px; background: #101d31; box-shadow: 0 16px 45px #02071166; } h1 { margin: 0; color: #70d8ff; } h2 { font-size: 18px; margin-top: 0; } form { display: grid; gap: 12px; margin-top: 24px; } input,button { border-radius: 8px; padding: 11px 12px; font: inherit; } input { border: 1px solid #3b5275; background: #0c1626; color: inherit; } button { border: 0; background: #28b6e6; color: #001521; cursor: pointer; font-weight: 700; } .link { background: transparent; color: #70d8ff; padding-left: 0; margin-top: 12px; } output { display: block; min-height: 42px; margin-top: 16px; color: #b9cbe4; font-size: 14px; } .table { height: 430px; color: #dbe8fa; } .ReactVirtualized__Table__headerRow { color: #70d8ff; } @media(max-width:800px) { main { grid-template-columns: 1fr; margin-top: 24px; } }
+
+/* Pipeline dashboard */
+.dashboard { max-width: 420px; }
+.dashboard-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.dashboard-header p { margin: 4px 0 0; color: #8ea3c4; font-size: 13px; }
+.dashboard-actions { display: flex; gap: 10px; margin-top: 18px; }
+.pipeline-form { display: grid; gap: 12px; margin-top: 18px; padding: 16px; border: 1px solid #203350; border-radius: 12px; background: #0c1626; }
+.mappings { display: grid; gap: 8px; }
+.mappings .label { font-size: 12px; color: #8ea3c4; text-transform: uppercase; letter-spacing: .04em; }
+.mapping-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; align-items: center; }
+.form-actions { display: flex; gap: 10px; align-items: center; }
+.link.small { padding: 4px 6px; font-size: 13px; }
+
+.pipeline-list { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 6px; }
+.pipeline-list li { border: 1px solid #203350; border-radius: 10px; padding: 8px 12px; background: #0c1626; }
+.pipeline-list li.active { border-color: #28b6e6; }
+.pipeline-row { display: flex; align-items: center; gap: 10px; }
+.pipeline-name { font-weight: 700; padding: 0; }
+.pipeline-meta { color: #8ea3c4; font-size: 12px; margin-right: auto; }
+.empty { color: #8ea3c4; font-size: 14px; }
+
+.selected-pipeline { margin-top: 22px; border-top: 1px solid #203350; padding-top: 18px; }
+.run-form { display: flex; gap: 8px; }
+.run-form input { flex: 1; }
+.run-status { margin-top: 14px; display: grid; gap: 8px; }
+.run-meta { color: #8ea3c4; font-size: 13px; margin-left: 8px; }
+.run-error { color: #ff8a8a; font-size: 13px; margin: 0; }
+.steps { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 6px; font-size: 13px; }
+
+.badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.badge-running { background: #2a4a70; color: #9fd4ff; }
+.badge-success { background: #1e4a33; color: #7ee7ab; }
+.badge-failed { background: #55232a; color: #ff9a9a; }
