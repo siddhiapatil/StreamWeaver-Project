@@ -10,7 +10,7 @@
  * - Forward errors to the error-handling middleware
  */
 
-const { handleFileUpload } = require("../services/upload.service");
+import { handleFileUpload } from '../services/upload.service.js';
 
 /**
  * Handles file upload requests.
@@ -19,20 +19,18 @@ const { handleFileUpload } = require("../services/upload.service");
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
-const uploadFile = async (req, res, next) => {
+export const uploadFile = async (req, res, next) => {
     try {
         const result = await handleFileUpload(req);
 
         res.json({
             success: true,
-            message: "File uploaded successfully",
-            filename: result.filename
+            message: 'File uploaded successfully',
+            jobId: result.jobId,
+            filename: result.filename,
+            size: result.size
         });
     } catch (error) {
         next(error);
     }
-};
-
-module.exports = {
-    uploadFile
 };

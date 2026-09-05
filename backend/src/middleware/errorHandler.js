@@ -6,13 +6,24 @@
  * and returns standardized error responses.
  */
 
-function errorHandler(err, req, res, next) {
-    console.error(err);
+export function errorHandler(err, req, res, next) {
+    console.error('[ERROR]', {
+        name: err.name,
+        message: err.message,
+        stack: err.stack,
+        timestamp: new Date().toISOString()
+    });
 
-    res.status(500).json({
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || 'Internal Server Error';
+    const code = err.code || 'INTERNAL_ERROR';
+
+    res.status(status).json({
         success: false,
-        message: "Internal Server Error"
+        error: {
+            code,
+            message,
+            ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+        }
     });
 }
-
-module.exports = errorHandler;
